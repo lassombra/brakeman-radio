@@ -117,7 +117,6 @@ namespace BrakemanRadio
 			var tracks = trainset.cars.SelectMany(car => car.Bogies)
 				.Select(bogie => bogie.track)
 				.Distinct();
-			Main.logger.Log("Tracks identified");
 			foreach (var item in tracks)
 			{
 				Main.logger.Log("\t" + item.logicTrack.ID.FullDisplayID);
@@ -141,9 +140,6 @@ namespace BrakemanRadio
 			}
 			var Bogies = trainset.firstCar.Bogies.Concat(trainset.lastCar.Bogies).Distinct().ToList();
 			var distance = WalkTrackToBogies(pointed, Bogies);
-			Main.logger.Log("Junction status");
-			Main.logger.Log("\t" + in_loaded + "\t" + out_loaded);
-			Main.logger.Log("\t" + distance);
 			return distance;
 		}
 
