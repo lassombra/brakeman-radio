@@ -1,16 +1,21 @@
-﻿using System;
+using System;
 using System.Reflection;
 using HarmonyLib;
 using UnityModManagerNet;
 
-namespace MOD_NAME;
+namespace BrakemanRadio;
 
 public static class Main
 {
+	internal static UnityModManager.ModEntry.ModLogger logger;
+
 	// Unity Mod Manage Wiki: https://wiki.nexusmods.com/index.php/Category:Unity_Mod_Manager
+
+
 	private static bool Load(UnityModManager.ModEntry modEntry)
 	{
-		Harmony? harmony = null;
+		logger = modEntry.Logger;
+		Harmony harmony = null;
 
 		try
 		{
