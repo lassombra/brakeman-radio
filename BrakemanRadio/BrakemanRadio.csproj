@@ -39,6 +39,7 @@
 		<Publicize Include="Assembly-CSharp:DV.CommsRadioController.allModes" />
 		<Publicize Include="Assembly-CSharp:DV.CommsRadioController.disabledModeIndices" />
 		<Publicize Include="Assembly-CSharp:DV.CommsRadioController.SetNextMode" />
+		<Publicize Include="Assembly-CSharp:DV.Logic.Job.TrackID.trackType" />
 	</ItemGroup>
 
 	<!-- Null Checking -->
