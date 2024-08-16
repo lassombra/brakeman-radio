@@ -21,7 +21,7 @@ public static class Main
 		{
 			harmony = new Harmony(modEntry.Info.Id);
 			harmony.PatchAll(Assembly.GetExecutingAssembly());
-
+			PlayerManager.CarChanged += PlayerManager_CarChanged;
 			// Other plugin startup logic
 		}
 		catch (Exception ex)
@@ -32,5 +32,10 @@ public static class Main
 		}
 
 		return true;
+	}
+
+	private static void PlayerManager_CarChanged(TrainCar obj)
+	{
+		TrainReverseMonitor.Instance.Car = obj;
 	}
 }

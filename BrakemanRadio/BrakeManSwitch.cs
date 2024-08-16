@@ -113,10 +113,6 @@ namespace BrakemanRadio
 			var tracks = trainset.cars.SelectMany(car => car.Bogies)
 				.Select(bogie => bogie.track)
 				.Distinct();
-			foreach (var item in tracks)
-			{
-				Main.logger.Log("\t" + item.logicTrack.ID.FullDisplayID);
-			}
 			in_loaded = false;
 			out_loaded = false;
 			var inTracks = TracksFromBranch(pointed.inBranch, pointed);
@@ -132,7 +128,7 @@ namespace BrakemanRadio
 					out_loaded = true;
 				}
 			}
-			if (!in_loaded && !out_loaded)
+			if (!in_loaded || !out_loaded)
 			{
 				return 0.0;
 			}
@@ -220,7 +216,7 @@ namespace BrakemanRadio
 		private static void WalkTrackSegment(RailTrack track, RailTrack prevTrack, ref Dictionary<Bogie, double> map, List<Bogie> bogies, double distanceSoFar)
 		{
 			bool lastStep = map.Count > 0;
-			if (track.inBranch.track == prevTrack)
+			if (track.inBranch?.track == prevTrack)
 			{
 				foreach (var item in bogies.FindAll(bogie => bogie.track == track))
 				{
@@ -235,7 +231,7 @@ namespace BrakemanRadio
 					WalkTrackSegment(track.outBranch.track, track, ref map, bogies, distanceSoFar + track.logicTrack.length);
 				}
 			}
-			else if (track.outBranch.track == prevTrack)
+			else if (track.outBranch?.track == prevTrack)
 			{
 				foreach (var item in bogies.FindAll(bogie => bogie.track == track))
 				{
