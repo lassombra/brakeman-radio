@@ -86,10 +86,6 @@ namespace BrakemanRadio
 
 		public void OnUse()
 		{
-			if (this.pendingSwitch != null)
-			{
-				return;
-			}
 			var pointed = this.switcher.PointedSwitch?.VisualSwitch.junction;
 			if (pointed == null)
 			{
@@ -117,30 +113,60 @@ namespace BrakemanRadio
 			var tracks = trainset.cars.SelectMany(car => car.Bogies)
 				.Select(bogie => bogie.track)
 				.Distinct();
-			foreach (var item in tracks)
-			{
-				BrakemanRadioControl.logger.Log("\t" + item.logicTrack.ID.FullDisplayID);
-			}
 			in_loaded = false;
 			out_loaded = false;
+			var inTracks = TracksFromBranch(pointed.inBranch, pointed);
+			var outTracks = TracksFromBranch(pointed.outBranches[pointed.selectedBranch], pointed);
 			foreach (var track in tracks)
 			{
-				if (pointed.inBranch.track == track)
+				if (inTracks.Contains(track))
 				{
 					in_loaded = true;
 				}
-				if (pointed.outBranches[pointed.selectedBranch].track == track)
+				if (outTracks.Contains(track))
 				{
 					out_loaded = true;
 				}
 			}
-			if (!in_loaded && !out_loaded)
+			if (!in_loaded || !out_loaded)
 			{
 				return 0.0;
 			}
 			var Bogies = trainset.firstCar.Bogies.Concat(trainset.lastCar.Bogies).Distinct().ToList();
 			var distance = WalkTrackToBogies(pointed, Bogies);
 			return distance;
+		}
+		private static RailTrack[] TracksFromBranch(Junction.Branch branch, Junction sourceJunction)
+		{
+			var firstTrack = branch.track;
+			if (firstTrack.inJunction == sourceJunction)
+			{
+				if (firstTrack.outJunction != null)
+				{
+					var track = NextTrackFromJunction(firstTrack.outJunction, firstTrack);
+					return new RailTrack[] { track, firstTrack };
+				}
+				return new RailTrack[]{ firstTrack, firstTrack.outBranch.track};
+			} else
+			{
+				if (firstTrack.inJunction != null)
+				{
+					var track = NextTrackFromJunction(firstTrack.inJunction, firstTrack);
+					return new RailTrack[] { track, firstTrack };
+				}
+				return new RailTrack[] { firstTrack, firstTrack.inBranch.track };
+			}
+		}
+
+		private static RailTrack NextTrackFromJunction(Junction inJunction, RailTrack firstTrack)
+		{
+			if (inJunction.inBranch.track == firstTrack)
+			{
+				return inJunction.outBranches[inJunction.selectedBranch].track;
+			} else
+			{
+				return inJunction.inBranch.track;
+			}
 		}
 
 		private static double WalkTrackToBogies(Junction junction, List<Bogie> bogies)
@@ -190,7 +216,7 @@ namespace BrakemanRadio
 		private static void WalkTrackSegment(RailTrack track, RailTrack prevTrack, ref Dictionary<Bogie, double> map, List<Bogie> bogies, double distanceSoFar)
 		{
 			bool lastStep = map.Count > 0;
-			if (track.inBranch.track == prevTrack)
+			if (track.inBranch?.track == prevTrack)
 			{
 				foreach (var item in bogies.FindAll(bogie => bogie.track == track))
 				{
@@ -205,7 +231,7 @@ namespace BrakemanRadio
 					WalkTrackSegment(track.outBranch.track, track, ref map, bogies, distanceSoFar + track.logicTrack.length);
 				}
 			}
-			else if (track.outBranch.track == prevTrack)
+			else if (track.outBranch?.track == prevTrack)
 			{
 				foreach (var item in bogies.FindAll(bogie => bogie.track == track))
 				{

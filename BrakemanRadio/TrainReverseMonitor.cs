@@ -52,6 +52,7 @@ namespace BrakemanRadio
 			WorldStreamingInit.LoadingFinished += Start;
 			UnloadWatcher.UnloadRequested -= Cleanup;
 		}
+
 		public IEnumerator MonitorCar()
 		{
 			while (true)

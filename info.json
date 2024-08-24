@@ -1,6 +1,6 @@
 {
 	"Id": "BrakemanRadio",
-	"Version": "0.0.1",
+	"Version": "0.1.0",
 	"DisplayName": "Brakeman's Enhanced Switch Mode",
 	"Author": "lassombra",
 	"EntryMethod": "BrakemanRadio.BrakemanRadioControl.Load",
