@@ -49,6 +49,8 @@ namespace BrakemanRadio
 		private void Cleanup()
 		{
 			StopCoroutine(this.coroutine);
+			WorldStreamingInit.LoadingFinished += Start;
+			UnloadWatcher.UnloadRequested -= Cleanup;
 		}
 
 		public IEnumerator MonitorCar()
@@ -57,6 +59,7 @@ namespace BrakemanRadio
 			{
 				if (IsReversing())
 				{
+					BrakemanRadioControl.Debug("Reversing");
 					var car = RearCar;
 					var ranges = new List<RangeToObstacle>();
 					foreach (var bogie in car.Bogies)
@@ -158,9 +161,11 @@ namespace BrakemanRadio
 			var trackDirection = bogie.TrackDirectionSign * bogie.Car.GetForwardSpeed();
 			if (trackDirection > 0)
 			{
+				BrakemanRadioControl.Debug("Walking forward");
 				return WalkTrack(track, bogie, 1);
 			} else if (trackDirection < 0)
 			{
+				BrakemanRadioControl.Debug("Walking backward");
 				return WalkTrack(track, bogie, -1);
 			}
 			return null;
@@ -168,10 +173,12 @@ namespace BrakemanRadio
 
 		private RangeToObstacle WalkTrack(RailTrack track, Bogie bogie, int direction, double distanceSoFar = 0.0)
 		{
+			BrakemanRadioControl.Debug("walking track " + track.logicTrack.ID.FullDisplayID);
 			var inRangeBogies = from b in track.onTrackBogies
 								where b.Car.trainset != bogie.Car.trainset
 								where bogie.track != track || ((b.traveller.Span * direction) > (bogie.traveller.Span * direction))
 								select b;
+			BrakemanRadioControl.Debug("Found " + inRangeBogies.Count() + " Bogies");
 			if (inRangeBogies.Any())
 			{
 				var ret = new RangeToObstacle();
@@ -295,16 +302,20 @@ namespace BrakemanRadio
 				var trainset = car.trainset;
 				if (trainset.firstCar.IsLoco)
 				{
+					BrakemanRadioControl.Debug("Rear Car: " + trainset.lastCar.ID);
 					return trainset.lastCar;
 				}
 				else if (trainset.lastCar.IsLoco)
 				{
+					BrakemanRadioControl.Debug("Rear Car: " + trainset.firstCar.ID);
 					return trainset.firstCar;
 				}
 				else if (trainset.locoIndices.Count > 0)
 				{
 					var walkCar = trainset.cars[trainset.locoIndices[0]];
-					return WalkCars(walkCar.rearCoupler);
+					var lastCar = WalkCars(walkCar.rearCoupler);
+					BrakemanRadioControl.Debug("Rear Car: " + lastCar.ID);
+					return lastCar;
 				}
 				return null;
 			}
