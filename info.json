@@ -3,7 +3,7 @@
 	"Version": "0.0.1",
 	"DisplayName": "Brakeman's Enhanced Switch Mode",
 	"Author": "lassombra",
-	"EntryMethod": "BrakemanRadio.Main.Load",
+	"EntryMethod": "BrakemanRadio.BrakemanRadioControl.Load",
 	"ManagerVersion": "0.27.3",
 	"Repository": "https://raw.githubusercontent.com/lassombra/brakeman-radio/main/repository.json"
 }

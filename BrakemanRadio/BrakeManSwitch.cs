@@ -119,7 +119,7 @@ namespace BrakemanRadio
 				.Distinct();
 			foreach (var item in tracks)
 			{
-				Main.logger.Log("\t" + item.logicTrack.ID.FullDisplayID);
+				BrakemanRadioControl.logger.Log("\t" + item.logicTrack.ID.FullDisplayID);
 			}
 			in_loaded = false;
 			out_loaded = false;
