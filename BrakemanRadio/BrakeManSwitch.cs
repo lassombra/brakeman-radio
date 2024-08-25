@@ -24,7 +24,14 @@ namespace BrakemanRadio
 			this.switcher.JunctionHovered += UpdateLCD;
 			this.switcher.JunctionUnHovered += UpdateLCD;
 			this.switcher.JunctionSwitched += UpdateLCD;
+			NextSwitchMonitor.Instance.NewJunction += UpdateLCD;
 			DV.Globals.G.Types.TryGetGeneralLicense("BR_AdvancedSwitching", out this.license);
+		}
+
+		private void UpdateLCD(Junction junction)
+		{
+			BrakemanRadioControl.Debug("Updating LCD for junction upcoming");
+			UpdateLCD();
 		}
 
 		private void Start()
@@ -46,18 +53,28 @@ namespace BrakemanRadio
 
 		private void UpdateLCD()
 		{
+			BrakemanRadioControl.Debug("Updating LCD");
 			if (this.switcher.PointedSwitch != null)
 			{
+				BrakemanRadioControl.Debug("Pointed switch is not null");
 				bool isLeft = this.switcher.PointedSwitch.IsPointingLeft();
 				if (this.switcher.PointedSwitch.IsBehind(base.transform))
 				{
 					isLeft = !isLeft;
 				}
 				this.lcd.TurnOn(isLeft);
+				this.display.SetContent(CommsRadioLocalization.SWITCH_INSTRUCTION);
 			}
-			else
+			else if (this.NextSwitch != null)
+			{
+				BrakemanRadioControl.Debug("Next Switch is not null");
+				this.lcd.TurnOn(NextSwitch.selectedBranch == 0);
+				this.display.SetContent("Toggle next switch in line");
+				BrakemanRadioControl.Debug("Updated for next switch");
+			} else
 			{
 				this.lcd.TurnOff();
+				this.display.SetContent(CommsRadioLocalization.SWITCH_INSTRUCTION);
 			}
 		}
 		public bool ButtonACustomAction()
@@ -73,31 +90,17 @@ namespace BrakemanRadio
 		public void Disable()
 		{
 			this.switcher.enabled = false;
+			NextSwitchMonitor.Instance.Disable();
 			this.lcd.TurnOff();
 		}
 
 		public void Enable()
 		{
 			this.switcher.enabled = true;
+			NextSwitchMonitor.Instance.Enable();
 		}
 
 		public Color GetLaserBeamColor() => BrakeManSwitch.laserColor;
-
-		public void Update()
-		{
-			if (!this.enabled)
-			{
-				return;
-			}
-			if (!this.switcher.PointedSwitch && NextSwitch)
-			{
-				var junction = NextSwitchMonitor.Instance.NextJunction;
-				lcd.TurnOn(junction.selectedBranch == 0);
-			} else if (!this.switcher.PointedSwitch)
-			{
-				this.lcd.TurnOff();
-			}
-		}
 
 		public void OnUpdate()
 		{
@@ -142,10 +145,35 @@ namespace BrakemanRadio
 			{
 				BrakemanRadioControl.Debug("Switching a distant switch");
 				NextSwitch.Switch(Junction.SwitchMode.REGULAR);
+				UpdateLCD();
+				ClearReverseSwitchesBeyond(NextSwitch);
 				return;
 			}
 			this.switcher.Use();
+			if (this.switcher.PointedSwitch != null)
+			{
+				ClearReverseSwitchesBeyond(this.switcher.PointedSwitch.VisualSwitch.junction);
+			}
 			UpdateLCD();
+		}
+
+		private void ClearReverseSwitchesBeyond(Junction nextSwitch)
+		{
+			if (!LicenseManager.Instance.IsGeneralLicenseAcquired(license))
+			{
+				return;
+			}
+			foreach (var junction in Walker.WalkJunctions(nextSwitch, true))
+			{
+				if (junction?.junction != null && !junction.isForward && junction.isMisaligned)
+				{
+					junction.junction.Switch(Junction.SwitchMode.REGULAR);
+				}
+				if (junction?.junction != null && junction.isForward)
+				{
+					break;
+				}
+			}
 		}
 
 		private static double CheckJunkctionStraddled(Junction pointed, Trainset trainset, out bool in_loaded, out bool out_loaded)
@@ -285,6 +313,7 @@ namespace BrakemanRadio
 				{
 					switched = true;
 					pointed.Switch(Junction.SwitchMode.REGULAR);
+					ClearReverseSwitchesBeyond(pointed);
 					SetPendingSwtich(null, null);
 				}
 			}

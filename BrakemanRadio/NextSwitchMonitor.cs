@@ -15,8 +15,30 @@ namespace BrakemanRadio
 	{
 		private Coroutine coroutine;
 		private GeneralLicenseType_v2 license;
+		private Junction _NextJunction = null;
+		public Action<Junction> NewJunction;
 
-		public Junction NextJunction { get; private set; } = null;
+		public Junction NextJunction
+		{
+			get
+			{
+				return _NextJunction;
+			}
+			private set
+			{
+				if (_NextJunction != value)
+				{
+					BrakemanRadioControl.Debug("Updating next junction");
+					_NextJunction = value;
+					if (NewJunction != null)
+					{
+						BrakemanRadioControl.Debug("Calling event handlers for next junction");
+						NewJunction(value);
+					}
+				}
+			}
+		}
+
 
 		private bool HasLicense
 		{
@@ -31,19 +53,31 @@ namespace BrakemanRadio
 			return "[Next Switch Monitor]";
 		}
 
-		public void Start()
+		public void Enable()
 		{
-			DV.Globals.G.Types.TryGetGeneralLicense("BR_AdvancedSwitching", out this.license);
 			BrakemanRadioControl.Debug("Starting NextSwitchMonitor");
 			this.coroutine = StartCoroutine(MonitorCar());
+		}
+
+		public void Disable()
+		{
+			Cleanup();
+		}
+
+		public void Start()
+		{
 			UnloadWatcher.UnloadRequested += Cleanup;
+			DV.Globals.G.Types.TryGetGeneralLicense("BR_AdvancedSwitching", out this.license);
 		}
 
 		private void Cleanup()
 		{
-			StopCoroutine(this.coroutine);
-			WorldStreamingInit.LoadingFinished += Start;
-			UnloadWatcher.UnloadRequested -= Cleanup;
+			if (this.coroutine != null)
+			{
+				StopCoroutine(this.coroutine);
+				this.NextJunction = null;
+				this.coroutine = null;
+			}
 		}
 
 		private IEnumerator MonitorCar()
@@ -71,8 +105,13 @@ namespace BrakemanRadio
 						BrakemanRadioControl.Debug("Car moving");
 						var train = LeadingEdge;
 						var bogies = train.Bogies[0];
-						NextJunction = GetNextJunction(bogies.track, train.GetForwardSpeed(), bogies.TrackDirectionSign);
-						BrakemanRadioControl.Debug("NextJunction " + NextJunction.name);
+						var upcomingJunction = GetNextJunction(bogies.track, train.GetForwardSpeed(), bogies.TrackDirectionSign);
+						BrakemanRadioControl.Debug("Found upcoming junction " + upcomingJunction?.GetInstanceID());
+						if (upcomingJunction != NextJunction)
+						{
+							NextJunction = upcomingJunction;
+							BrakemanRadioControl.Debug("NextJunction " + NextJunction?.GetInstanceID());
+						}
 					}
 				}
 				yield return new WaitForSeconds(1f);
@@ -81,35 +120,18 @@ namespace BrakemanRadio
 
 		private Junction GetNextJunction(RailTrack track, float? speed, float? trackDirectionSign)
 		{
-			BrakemanRadioControl.Debug("Getting next junction for track " + track.logicTrack.ID.FullID + " speed: " + speed + " trackDirection: " + trackDirectionSign);
-			if (speed * trackDirectionSign > 0)
+			if (speed == null || trackDirectionSign == null)
 			{
-				if (track.outJunction != null && track.outJunction.inBranch.track == track)
-				{
-					return track.outJunction;
-				} else if (track.outJunction != null)
-				{
-					return GetNextJunction(track.outJunction.inBranch.track, track.outJunction);
-				}
-				else
-				{
-					return GetNextJunction(track.outBranch?.track, track);
-				}
-			} else
+				return null;
+			}
+			foreach(var junction in Walker.WalkJunctions(track, (float)(speed * trackDirectionSign)))
 			{
-				if (track.inJunction != null && track.inJunction.inBranch.track == track)
+				if (junction.isForward)
 				{
-					return track.inJunction;
-				}
-				else if (track.inJunction != null)
-				{
-					return GetNextJunction(track.inJunction.inBranch.track, track.inJunction);
-				}
-				else
-				{
-					return GetNextJunction(track.inBranch?.track, track);
+					return junction.junction;
 				}
 			}
+			return null;
 		}
 
 		private Junction GetNextJunction(RailTrack nextTrack, RailTrack lastTrack)
