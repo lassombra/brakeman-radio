@@ -59,7 +59,7 @@ namespace BrakemanRadio
 			{
 				if (IsReversing())
 				{
-					BrakemanRadioControl.Debug("Reversing");
+					//BrakemanRadioControl.Debug("Reversing");
 					var car = RearCar;
 					var ranges = new List<RangeToObstacle>();
 					foreach (var bogie in car.Bogies)
@@ -144,7 +144,13 @@ namespace BrakemanRadio
 					result += " until next car";
 					break;
 				case ObstacleType.TrackEnd:
-					result += " until end of track " + range.trackName;
+					if (range.trackName != null)
+					{
+						result += " until end of track " + range.trackName;
+					} else
+					{
+						result += " until the end of available track";
+					}
 					break;
 			}
 			return result;
@@ -152,128 +158,94 @@ namespace BrakemanRadio
 
 		private RangeToObstacle CalculateRangeToObstacle(Bogie bogie)
 		{
-			var track = bogie.track;
-			return WalkTrack(track, bogie);
-		}
-
-		private RangeToObstacle WalkTrack(RailTrack track, Bogie bogie)
-		{
-			var trackDirection = bogie.TrackDirectionSign * bogie.Car.GetForwardSpeed();
-			if (trackDirection > 0)
-			{
-				BrakemanRadioControl.Debug("Walking forward");
-				return WalkTrack(track, bogie, 1);
-			} else if (trackDirection < 0)
-			{
-				BrakemanRadioControl.Debug("Walking backward");
-				return WalkTrack(track, bogie, -1);
-			}
-			return null;
-		}
-
-		private RangeToObstacle WalkTrack(RailTrack track, Bogie bogie, int direction, double distanceSoFar = 0.0)
-		{
-			BrakemanRadioControl.Debug("walking track " + track.logicTrack.ID.FullDisplayID);
-			var inRangeBogies = from b in track.onTrackBogies
-								where b.Car.trainset != bogie.Car.trainset
-								where bogie.track != track || ((b.traveller.Span * direction) > (bogie.traveller.Span * direction))
-								select b;
-			BrakemanRadioControl.Debug("Found " + inRangeBogies.Count() + " Bogies");
-			if (inRangeBogies.Any())
-			{
-				var ret = new RangeToObstacle();
-				ret.type = ObstacleType.Car;
-				ret.range = inRangeBogies.Select(b => b.traveller.Span * direction).Min();
-				if (track == bogie.track)
+			var enumerator = Walker.WalkTracks(bogie.track, bogie.TrackDirectionSign * bogie.Car.GetForwardSpeed());
+			var distanceSoFar = 0.0;
+			foreach (var track in enumerator)  {
+				BrakemanRadioControl.Debug("Checking Tracks for end " + track.Key.logicTrack.ID.FullID + "\t" + track.Value);
+				if ((from b in track.Key.onTrackBogies
+					where b.Car.trainset != bogie.Car.trainset
+					select b).Count() > 0)
 				{
-					ret.range -= bogie.traveller.Span * direction;
+					return CalcDistanceToBogies(track, distanceSoFar, bogie);
+				} else if (AllowedTypes.Contains(track.Key.logicTrack.ID.trackType))
+				{
+					return CalcDistanceToEndOfTrack(track, distanceSoFar, bogie);
 				}
-				ret.range = Math.Abs(ret.range);
-				ret.range += distanceSoFar;
-				return ret;
-			}
-			if (AllowedTypes.Contains(track.logicTrack.ID.trackType))
-			{
-				var ret = new RangeToObstacle();
-				ret.type = ObstacleType.TrackEnd;
-				ret.trackName = track.logicTrack.ID.FullDisplayID.ToString();
-				ret.range = RemainingTrackLength(track, bogie, direction) + distanceSoFar;
-				return ret;
-			}
-			var distance = distanceSoFar + RemainingTrackLength(track, bogie, direction);
-			if (distance < bogie.Car.logicCar.length * 10)
-			{
-				return WalkTrack(GetNextTrack(track, direction), bogie, GetNextTrackDirection(track, direction), distance);
-			}
-			return null;
-		}
-		private int GetNextTrackDirection(RailTrack track, int direction)
-		{
-			var nextTrack = GetNextTrack(track, direction);
-			if (nextTrack.inBranch.track == track)
-			{
-				return 1;
-			} else if (
-				nextTrack.outBranch.track == track)
-			{
-				return -1;
-			} else
-			{
-				var junction = direction > 0 ? track.outJunction : track.inJunction;
-				if (nextTrack.inJunction == junction)
+				if (track.Key == bogie.track)
 				{
-					return 1;
+					if (bogie.TrackDirectionSign * bogie.Car.GetForwardSpeed() > 0)
+					{
+						distanceSoFar += bogie.traveller.Span;
+					}
+					else
+					{
+						distanceSoFar += track.Key.logicTrack.length - bogie.traveller.Span;
+					}
 				} else
 				{
-					return -1;
+					distanceSoFar += track.Key.logicTrack.length;
+				}
+				if (distanceSoFar > 40.0)
+				{
+					return null;
 				}
 			}
+			var range = new RangeToObstacle();
+			range.range = distanceSoFar;
+			range.type = ObstacleType.TrackEnd;
+			return range;
 		}
 
-		private RailTrack GetNextTrack(RailTrack track, int direction)
+		private RangeToObstacle CalcDistanceToEndOfTrack(KeyValuePair<RailTrack, float> track, double distanceSoFar, Bogie bogie)
 		{
-			if (direction > 0)
+			var range = new RangeToObstacle();
+			if (track.Key == bogie.track)
 			{
-				// we're going ot OUT side
-				if (track.outJunction != null)
+				if (track.Value > 0)
 				{
-					return GetNextTrack(track.outJunction, track);
+					range.range = track.Key.logicTrack.length - bogie.traveller.Span;
 				}
-				return track.outBranch.track;
+				else
+				{
+					range.range = bogie.traveller.Span;
+				}
 			}
 			else
 			{
-				if (track.inJunction != null)
-				{
-					return GetNextTrack(track.inJunction, track);
-				}
-				return track.inBranch.track;
+				range.range = track.Key.logicTrack.length + distanceSoFar;
 			}
+			range.type = ObstacleType.TrackEnd;
+			range.trackName = track.Key.logicTrack.ID.FullDisplayID;
+			return range;
 		}
 
-		private RailTrack GetNextTrack(Junction junction, RailTrack track)
+		private RangeToObstacle CalcDistanceToBogies(KeyValuePair<RailTrack, float> track, double distanceSoFar, Bogie bogie)
 		{
-			if (junction.inBranch.track == track)
+			var range = new RangeToObstacle();
+			if (track.Key == bogie.track)
 			{
-				return junction.outBranches[junction.selectedBranch].track;
-			}
-			return junction.inBranch.track;
-		}
-
-		private static double RemainingTrackLength(RailTrack track, Bogie bogie, int direction)
-		{
-			if (bogie.track != track)
+				var directionSign = bogie.TrackDirectionSign * bogie.Car.GetForwardSpeed();
+				var collidingBogie = (from b in track.Key.onTrackBogies
+				 where b.Car.trainset != bogie.Car.trainset
+				 where b.traveller.Span * directionSign > bogie.traveller.Span * directionSign
+				 orderby b.traveller.Span * directionSign ascending
+				 select b).First();
+				range.range = Math.Abs(collidingBogie.traveller.Span - bogie.traveller.Span);
+			} else if (track.Value > 0) 
 			{
-				return track.logicTrack.length;
-			}
-			if (direction > 0)
+				var collidingBogie = (from b in track.Key.onTrackBogies
+									  orderby b.traveller.Span ascending
+									  select b).First();
+				range.range = distanceSoFar += collidingBogie.traveller.Span;
+			} else
 			{
-				return track.logicTrack.length - bogie.traveller.Span;
+				var collidingBogie = (from b in track.Key.onTrackBogies
+									  orderby b.traveller.Span descending
+									  select b).First();
+				range.range = distanceSoFar += track.Key.logicTrack.length - collidingBogie.traveller.Span;
 			}
-			else
-			{
-				return bogie.traveller.Span;
-			}
+			range.type = ObstacleType.Car;
+			return range;
 		}
 
 		private bool IsReversing()
@@ -302,19 +274,19 @@ namespace BrakemanRadio
 				var trainset = car.trainset;
 				if (trainset.firstCar.IsLoco)
 				{
-					BrakemanRadioControl.Debug("Rear Car: " + trainset.lastCar.ID);
+					//BrakemanRadioControl.Debug("Rear Car: " + trainset.lastCar.ID);
 					return trainset.lastCar;
 				}
 				else if (trainset.lastCar.IsLoco)
 				{
-					BrakemanRadioControl.Debug("Rear Car: " + trainset.firstCar.ID);
+					//BrakemanRadioControl.Debug("Rear Car: " + trainset.firstCar.ID);
 					return trainset.firstCar;
 				}
 				else if (trainset.locoIndices.Count > 0)
 				{
 					var walkCar = trainset.cars[trainset.locoIndices[0]];
 					var lastCar = WalkCars(walkCar.rearCoupler);
-					BrakemanRadioControl.Debug("Rear Car: " + lastCar.ID);
+					//BrakemanRadioControl.Debug("Rear Car: " + lastCar.ID);
 					return lastCar;
 				}
 				return null;
