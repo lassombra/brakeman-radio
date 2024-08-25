@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using DV.UI;
 using DV.Utils;
 using UnityEngine.Playables;
+using DV.ThingTypes;
 
 namespace BrakemanRadio
 {
@@ -23,6 +24,7 @@ namespace BrakemanRadio
 			this.switcher.JunctionHovered += UpdateLCD;
 			this.switcher.JunctionUnHovered += UpdateLCD;
 			this.switcher.JunctionSwitched += UpdateLCD;
+			DV.Globals.G.Types.TryGetGeneralLicense("BR_AdvancedSwitching", out this.license);
 		}
 
 		private void Start()
@@ -71,6 +73,7 @@ namespace BrakemanRadio
 		public void Disable()
 		{
 			this.switcher.enabled = false;
+			this.lcd.TurnOff();
 		}
 
 		public void Enable()
@@ -80,13 +83,39 @@ namespace BrakemanRadio
 
 		public Color GetLaserBeamColor() => BrakeManSwitch.laserColor;
 
+		public void Update()
+		{
+			if (!this.enabled)
+			{
+				return;
+			}
+			if (!this.switcher.PointedSwitch && NextSwitch)
+			{
+				var junction = NextSwitchMonitor.Instance.NextJunction;
+				lcd.TurnOn(junction.selectedBranch == 0);
+			} else if (!this.switcher.PointedSwitch)
+			{
+				this.lcd.TurnOff();
+			}
+		}
+
 		public void OnUpdate()
 		{
 		}
 
+		Junction NextSwitch { get
+			{
+				if (!LicenseManager.Instance.IsGeneralLicenseAcquired(this.license) && BrakemanRadioControl.Settings.RequireLicense)
+				{
+					return null;
+				}
+				return NextSwitchMonitor.Instance.NextJunction;
+			}
+		}
+
 		public void OnUse()
 		{
-			var pointed = this.switcher.PointedSwitch?.VisualSwitch.junction;
+			var pointed = this.switcher.PointedSwitch?.VisualSwitch.junction ?? NextSwitch;
 			if (pointed == null)
 			{
 				return;
@@ -103,6 +132,13 @@ namespace BrakemanRadio
 					SetPendingSwtich(pointed, trainset);
 					return;
 				}
+			}
+			BrakemanRadioControl.Debug("Radio used, switch isn't straddled");
+			if (this.switcher.PointedSwitch == null && NextSwitch != null)
+			{
+				BrakemanRadioControl.Debug("Switching a distant switch");
+				NextSwitch.Switch(Junction.SwitchMode.REGULAR);
+				return;
 			}
 			this.switcher.Use();
 			UpdateLCD();
@@ -344,5 +380,6 @@ namespace BrakemanRadio
 		private static Color laserColor = new Color(1.0f, 0f, 0f);
 		private Junction pendingSwitch;
 		private Trainset trainset;
+		private GeneralLicenseType_v2 license;
 	}
 }
