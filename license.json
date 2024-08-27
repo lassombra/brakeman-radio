@@ -1,0 +1,52 @@
+{
+  "LicenseType": 0,
+  "Identifier": "BR_AdvancedSwitching",
+  "Color": {
+    "R": 0.168627456,
+    "G": 0.6509804,
+    "B": 0.6509804,
+    "A": 1.0
+  },
+  "Price": 20000.0,
+  "InsuranceFeeQuotaIncrease": 0.0,
+  "BonusTimeDecreasePercentage": 0.0,
+  "RequiredGeneralLicenseId": "",
+  "RequiredJobLicenseId": "Shunting",
+  "Availability": 0,
+  "TranslationName": {
+    "Items": [
+      {
+        "Language": 0,
+        "Value": "Advanced Switching"
+      }
+    ]
+  },
+  "TranslationDescription": {
+    "Items": [
+      {
+        "Language": 0,
+        "Value": "Enables additional options in the switch radio mode"
+      }
+    ]
+  },
+  "TranslationItem": {
+    "Items": [
+      {
+        "Language": 0,
+        "Value": "Advanced Switching License"
+      }
+    ]
+  },
+  "TranslationInfoItem": {
+    "Items": [
+      {
+        "Language": 0,
+        "Value": "Advanced Switching Info"
+      }
+    ]
+  },
+  "LocalizationKey": "customlicenses/br_advancedswitching",
+  "LocalizationKeyDescription": "customlicenses/br_advancedswitching_desc",
+  "LocalizationKeyItem": "customlicenses/br_advancedswitching_item",
+  "LocalizationKeyInfoItem": "customlicenses/br_advancedswitching_sample_item"
+}

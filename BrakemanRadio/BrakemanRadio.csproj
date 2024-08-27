@@ -15,6 +15,7 @@
 		<Reference Include="DV.UI" />
 		<Reference Include="DV.Utils" />
 		<Reference Include="DV.UIFramework" />
+		<Reference Include="DV.ThingTypes" />
 	</ItemGroup>
 
 	<!-- Unity -->
