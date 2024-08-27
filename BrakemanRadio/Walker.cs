@@ -59,21 +59,21 @@ namespace BrakemanRadio
 		{
 			var nextTrack = lastJunction.isForward ? lastJunction.junction.outBranches[lastJunction.junction.selectedBranch]?.track : lastJunction.junction.inBranch?.track;
 			var nextJunction = new ReachedJunction();
-			if (nextTrack.inJunction != null && nextTrack.outJunction != null)
+			if (nextTrack?.inJunction != null && nextTrack?.outJunction != null)
 			{
 				// We have a one track span
 				if (nextTrack.inJunction == lastJunction.junction) nextJunction.junction = nextTrack.outJunction;
 				else nextJunction.junction = nextTrack.inJunction;
 			} else
 			{
-				float nextDirection = nextTrack.inJunction == lastJunction.junction ? 1 : -1;
+				float nextDirection = nextTrack?.inJunction == lastJunction.junction ? 1 : -1;
 				do
 				{
 					var walkedTrack = GetNextTrack(nextTrack, nextDirection);
 					nextTrack = walkedTrack.Key;
 					nextDirection = walkedTrack.Value;
 				} while (nextTrack != null && nextTrack.inJunction == null && nextTrack.outJunction == null);
-				nextJunction.junction = nextDirection > 0 ? nextTrack.outJunction : nextTrack.inJunction;
+				nextJunction.junction = nextDirection > 0 ? nextTrack?.outJunction : nextTrack?.inJunction;
 			}
 			nextJunction.isForward = nextJunction.junction?.inBranch?.track == nextTrack;
 			nextJunction.isMisaligned = !nextJunction.isForward && nextJunction.junction?.outBranches[nextJunction.junction.selectedBranch]?.track != nextTrack;

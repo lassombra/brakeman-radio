@@ -9,6 +9,7 @@ using DV.UI;
 using DV.Utils;
 using UnityEngine.Playables;
 using DV.ThingTypes;
+using DV.Logic.Job;
 
 namespace BrakemanRadio
 {
@@ -200,10 +201,30 @@ namespace BrakemanRadio
 			{
 				return 0.0;
 			}
-			var Bogies = trainset.firstCar.Bogies.Concat(trainset.lastCar.Bogies).Distinct().ToList();
-			var distance = WalkTrackToBogies(pointed, Bogies);
+			var bogies = trainset.cars.Count > 1 ? FindEdgeBogies(trainset) : trainset.cars[0].Bogies;
+			var distance = WalkTrackToBogies(pointed, bogies.ToList());
 			return distance;
 		}
+
+		private static IEnumerable<Bogie> FindEdgeBogies(Trainset trainset)
+		{
+			foreach (var car in new TrainCar[] { trainset.firstCar, trainset.lastCar })
+			{
+				var bogies = from bogie in car.Bogies
+							 orderby bogie.transform.localPosition.z descending
+							 select bogie;
+				var forward = car.frontCoupler.transform.localPosition.z > car.rearCoupler.transform.localPosition.z;
+				if (!car.frontCoupler.IsCoupled())
+				{
+					yield return forward ? bogies.First() : bogies.Last();
+				}
+				else
+				{
+					yield return forward ? bogies.Last() : bogies.First();
+				}
+			}
+		}
+
 		private static RailTrack[] TracksFromBranch(Junction.Branch branch, Junction sourceJunction)
 		{
 			var firstTrack = branch.track;
@@ -314,7 +335,7 @@ namespace BrakemanRadio
 					switched = true;
 					pointed.Switch(Junction.SwitchMode.REGULAR);
 					ClearReverseSwitchesBeyond(pointed);
-					SetPendingSwtich(null, null);
+					this.monitoredJunctions.Remove(pointed);
 				}
 			}
 			if (notification != null)

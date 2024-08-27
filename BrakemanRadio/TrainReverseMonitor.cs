@@ -111,13 +111,17 @@ namespace BrakemanRadio
 
 		private bool CheckContact(TrainCar car)
 		{
-			if (car.frontCoupler.IsCoupled())
+			if (!car.rearCoupler.IsCoupled() && car.rearCoupler.GetFirstCouplerInRange(0.5f) != null)
 			{
-				return car.rearCoupler.GetFirstCouplerInRange(0.5f) != null;
+				return true;
+			}
+			else if (!car.frontCoupler.IsCoupled() && car.frontCoupler.GetFirstCouplerInRange(0.5f) != null)
+			{
+				return true;
 			}
 			else
 			{
-				return car.frontCoupler.GetFirstCouplerInRange(0.5f) != null;
+				return false;
 			}
 		}
 
@@ -161,7 +165,7 @@ namespace BrakemanRadio
 			var enumerator = Walker.WalkTracks(bogie.track, bogie.TrackDirectionSign * bogie.Car.GetForwardSpeed());
 			var distanceSoFar = 0.0;
 			foreach (var track in enumerator)  {
-				BrakemanRadioControl.Debug("Checking Tracks for end " + track.Key.logicTrack.ID.FullID + "\t" + track.Value);
+				BrakemanRadioControl.Debug("Checking Tracks for end " + track.Key.logicTrack.ID.FullID + "\t" + track.Value + "\t" + distanceSoFar);
 				if ((from b in track.Key.onTrackBogies
 					where b.Car.trainset != bogie.Car.trainset
 					select b).Count() > 0)
@@ -175,17 +179,17 @@ namespace BrakemanRadio
 				{
 					if (bogie.TrackDirectionSign * bogie.Car.GetForwardSpeed() > 0)
 					{
-						distanceSoFar += bogie.traveller.Span;
+						distanceSoFar += track.Key.logicTrack.length - bogie.traveller.Span;
 					}
 					else
 					{
-						distanceSoFar += track.Key.logicTrack.length - bogie.traveller.Span;
+						distanceSoFar += bogie.traveller.Span;
 					}
 				} else
 				{
 					distanceSoFar += track.Key.logicTrack.length;
 				}
-				if (distanceSoFar > 40.0)
+				if (distanceSoFar > 150.0)
 				{
 					return null;
 				}
@@ -224,7 +228,7 @@ namespace BrakemanRadio
 			var range = new RangeToObstacle();
 			if (track.Key == bogie.track)
 			{
-				var directionSign = bogie.TrackDirectionSign * bogie.Car.GetForwardSpeed();
+				var directionSign = track.Value;
 				var collidingBogie = (from b in track.Key.onTrackBogies
 				 where b.Car.trainset != bogie.Car.trainset
 				 where b.traveller.Span * directionSign > bogie.traveller.Span * directionSign
