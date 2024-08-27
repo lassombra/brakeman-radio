@@ -9,6 +9,7 @@ using DV.UI;
 using DV.Utils;
 using UnityEngine.Playables;
 using DV.ThingTypes;
+using DV.Logic.Job;
 
 namespace BrakemanRadio
 {
@@ -24,7 +25,14 @@ namespace BrakemanRadio
 			this.switcher.JunctionHovered += UpdateLCD;
 			this.switcher.JunctionUnHovered += UpdateLCD;
 			this.switcher.JunctionSwitched += UpdateLCD;
+			NextSwitchMonitor.Instance.NewJunction += UpdateLCD;
 			DV.Globals.G.Types.TryGetGeneralLicense("BR_AdvancedSwitching", out this.license);
+		}
+
+		private void UpdateLCD(Junction junction)
+		{
+			BrakemanRadioControl.Debug("Updating LCD for junction upcoming");
+			UpdateLCD();
 		}
 
 		private void Start()
@@ -46,18 +54,28 @@ namespace BrakemanRadio
 
 		private void UpdateLCD()
 		{
+			BrakemanRadioControl.Debug("Updating LCD");
 			if (this.switcher.PointedSwitch != null)
 			{
+				BrakemanRadioControl.Debug("Pointed switch is not null");
 				bool isLeft = this.switcher.PointedSwitch.IsPointingLeft();
 				if (this.switcher.PointedSwitch.IsBehind(base.transform))
 				{
 					isLeft = !isLeft;
 				}
 				this.lcd.TurnOn(isLeft);
+				this.display.SetContent(CommsRadioLocalization.SWITCH_INSTRUCTION);
 			}
-			else
+			else if (this.NextSwitch != null)
+			{
+				BrakemanRadioControl.Debug("Next Switch is not null");
+				this.lcd.TurnOn(NextSwitch.selectedBranch == 0);
+				this.display.SetContent("Toggle next switch in line");
+				BrakemanRadioControl.Debug("Updated for next switch");
+			} else
 			{
 				this.lcd.TurnOff();
+				this.display.SetContent(CommsRadioLocalization.SWITCH_INSTRUCTION);
 			}
 		}
 		public bool ButtonACustomAction()
@@ -73,37 +91,25 @@ namespace BrakemanRadio
 		public void Disable()
 		{
 			this.switcher.enabled = false;
+			NextSwitchMonitor.Instance.Disable();
 			this.lcd.TurnOff();
 		}
 
 		public void Enable()
 		{
 			this.switcher.enabled = true;
+			NextSwitchMonitor.Instance.Enable();
 		}
 
 		public Color GetLaserBeamColor() => BrakeManSwitch.laserColor;
-
-		public void Update()
-		{
-			if (!this.enabled)
-			{
-				return;
-			}
-			if (!this.switcher.PointedSwitch && NextSwitch)
-			{
-				var junction = NextSwitchMonitor.Instance.NextJunction;
-				lcd.TurnOn(junction.selectedBranch == 0);
-			} else if (!this.switcher.PointedSwitch)
-			{
-				this.lcd.TurnOff();
-			}
-		}
 
 		public void OnUpdate()
 		{
 		}
 
-		Junction NextSwitch { get
+		Junction NextSwitch
+		{
+			get
 			{
 				if (!LicenseManager.Instance.IsGeneralLicenseAcquired(this.license) && BrakemanRadioControl.Settings.RequireLicense)
 				{
@@ -120,8 +126,10 @@ namespace BrakemanRadio
 			{
 				return;
 			}
-			var trainsetsOnOutTrack = from b in pointed.outBranches[pointed.selectedBranch].track.onTrackBogies
-									  select b.Car.trainset;
+			var outTrack = pointed.outBranches[pointed.selectedBranch].track;
+			var tracks = new RailTrack[] { outTrack, outTrack.inJunction == pointed ? outTrack.outBranch.track : outTrack.inBranch.track };
+			var bogies = tracks.SelectMany(track => track.onTrackBogies);
+			var trainsetsOnOutTrack = bogies.Select(bogie => bogie.Car.trainset);
 			foreach (var trainset in trainsetsOnOutTrack.Distinct())
 			{
 				bool in_loaded, out_loaded;
@@ -138,10 +146,35 @@ namespace BrakemanRadio
 			{
 				BrakemanRadioControl.Debug("Switching a distant switch");
 				NextSwitch.Switch(Junction.SwitchMode.REGULAR);
+				UpdateLCD();
+				ClearReverseSwitchesBeyond(NextSwitch);
 				return;
 			}
 			this.switcher.Use();
+			if (this.switcher.PointedSwitch != null)
+			{
+				ClearReverseSwitchesBeyond(this.switcher.PointedSwitch.VisualSwitch.junction);
+			}
 			UpdateLCD();
+		}
+
+		private void ClearReverseSwitchesBeyond(Junction nextSwitch)
+		{
+			if (!LicenseManager.Instance.IsGeneralLicenseAcquired(license))
+			{
+				return;
+			}
+			foreach (var junction in Walker.WalkJunctions(nextSwitch, true))
+			{
+				if (junction?.junction != null && !junction.isForward && junction.isMisaligned)
+				{
+					junction.junction.Switch(Junction.SwitchMode.REGULAR);
+				}
+				if (junction?.junction != null && junction.isForward)
+				{
+					break;
+				}
+			}
 		}
 
 		private static double CheckJunkctionStraddled(Junction pointed, Trainset trainset, out bool in_loaded, out bool out_loaded)
@@ -168,10 +201,30 @@ namespace BrakemanRadio
 			{
 				return 0.0;
 			}
-			var Bogies = trainset.firstCar.Bogies.Concat(trainset.lastCar.Bogies).Distinct().ToList();
-			var distance = WalkTrackToBogies(pointed, Bogies);
+			var bogies = trainset.cars.Count > 1 ? FindEdgeBogies(trainset) : trainset.cars[0].Bogies;
+			var distance = WalkTrackToBogies(pointed, bogies.ToList());
 			return distance;
 		}
+
+		private static IEnumerable<Bogie> FindEdgeBogies(Trainset trainset)
+		{
+			foreach (var car in new TrainCar[] { trainset.firstCar, trainset.lastCar })
+			{
+				var bogies = from bogie in car.Bogies
+							 orderby bogie.transform.localPosition.z descending
+							 select bogie;
+				var forward = car.frontCoupler.transform.localPosition.z > car.rearCoupler.transform.localPosition.z;
+				if (!car.frontCoupler.IsCoupled())
+				{
+					yield return forward ? bogies.First() : bogies.Last();
+				}
+				else
+				{
+					yield return forward ? bogies.Last() : bogies.First();
+				}
+			}
+		}
+
 		private static RailTrack[] TracksFromBranch(Junction.Branch branch, Junction sourceJunction)
 		{
 			var firstTrack = branch.track;
@@ -208,131 +261,62 @@ namespace BrakemanRadio
 		private static double WalkTrackToBogies(Junction junction, List<Bogie> bogies)
 		{
 			Dictionary<Bogie, double> map = new Dictionary<Bogie, double>();
-			WalkTrackSegment(junction.outBranches[junction.selectedBranch].track, junction, ref map, bogies);
+			var outTrack = junction.outBranches[junction.selectedBranch].track;
+			var found = false;
+			var lastRun = false;
+			var distanceSoFar = 0.0;
+			foreach (var track in Walker.WalkTracks(outTrack, outTrack.inJunction == junction ? 1 : -1))
+			{
+				foreach (var trackedBogie in track.Key.onTrackBogies)
+				{
+					if (bogies.Contains(trackedBogie))
+					{
+						found = true;
+						map[trackedBogie] = distanceSoFar + (track.Value > 0 ? trackedBogie.traveller.Span : track.Key.logicTrack.length - trackedBogie.traveller.Span);
+					}
+				}
+				distanceSoFar += track.Key.logicTrack.length;
+				BrakemanRadioControl.Debug("Walking for switch\t" + track.Key.logicTrack.ID + "\t" + distanceSoFar);
+				if (lastRun)
+				{
+					break;
+				}
+				lastRun = found;
+			}
 			if (map.Count == 0) { return 0; }
 			var bogie = map.ToDictionary(x => x.Value, y => y.Key)[map.Values.Max()];
 			var car = bogie.Car;
 			return map.Values.Max() / car.logicCar.length;
 		}
 
-		private static void WalkTrackSegment(RailTrack track, Junction sourceJunction, ref Dictionary<Bogie, double> map, List<Bogie> bogies, double distanceSoFar = 0.0f)
-		{
-			bool lastStep = map.Count > 0;
-			if (track.inJunction == sourceJunction)
-			{
-				foreach (var item in bogies.FindAll(bogie => bogie.track == track))
-				{
-					map[item] = distanceSoFar + CalculateDistanceOnTrack(track, item, true);
-				}
-				if (!lastStep && track.outJunction != null)
-				{
-					WalkTrackSegment(track.outJunction, track, ref map, bogies, distanceSoFar + track.logicTrack.length);
-				}
-				else if (!lastStep && track.outBranch != null)
-				{
-					WalkTrackSegment(track.outBranch.track, track, ref map, bogies, distanceSoFar + track.logicTrack.length);
-				}
-			}
-			else if (track.outJunction == sourceJunction)
-			{
-				foreach(var item in bogies.FindAll(bogie => bogie.track == track))
-				{
-					map[item] = distanceSoFar + CalculateDistanceOnTrack(track, item, false);
-				}
-				if (!lastStep && track.inJunction != null)
-				{
-					WalkTrackSegment(track.inJunction, track, ref map, bogies, distanceSoFar + track.logicTrack.length);
-				} else if (!lastStep && track.inBranch != null)
-				{
-					WalkTrackSegment(track.inBranch.track, track, ref map, bogies, distanceSoFar + track.logicTrack.length);
-				}
-			}
-		}
-
-		private static void WalkTrackSegment(RailTrack track, RailTrack prevTrack, ref Dictionary<Bogie, double> map, List<Bogie> bogies, double distanceSoFar)
-		{
-			bool lastStep = map.Count > 0;
-			if (track.inBranch?.track == prevTrack)
-			{
-				foreach (var item in bogies.FindAll(bogie => bogie.track == track))
-				{
-					map[item] = distanceSoFar + CalculateDistanceOnTrack(track, item, true);
-				}
-				if (!lastStep && track.outJunction != null)
-				{
-					WalkTrackSegment(track.outJunction, track, ref map, bogies, distanceSoFar + track.logicTrack.length);
-				}
-				else if (!lastStep && track.outBranch != null)
-				{
-					WalkTrackSegment(track.outBranch.track, track, ref map, bogies, distanceSoFar + track.logicTrack.length);
-				}
-			}
-			else if (track.outBranch?.track == prevTrack)
-			{
-				foreach (var item in bogies.FindAll(bogie => bogie.track == track))
-				{
-					map[item] = distanceSoFar + CalculateDistanceOnTrack(track, item, false);
-				}
-				if (!lastStep && track.inJunction != null)
-				{
-					WalkTrackSegment(track.inJunction, track, ref map, bogies, distanceSoFar + track.logicTrack.length);
-				}
-				else if (!lastStep && track.inBranch != null)
-				{
-					WalkTrackSegment(track.inBranch.track, track, ref map, bogies, distanceSoFar + track.logicTrack.length);
-				}
-			}
-		}
-
-		private static void WalkTrackSegment(Junction junction, RailTrack track, ref Dictionary<Bogie, double> map, List<Bogie> bogies, double distanceSoFar)
-		{
-			if (junction.inBranch.track == track) {
-				WalkTrackSegment(junction.outBranches[junction.selectedBranch].track, junction, ref map, bogies, distanceSoFar);
-			} else if (junction.outBranches[junction.selectedBranch].track == track)
-			{
-				WalkTrackSegment(junction.inBranch.track, junction, ref map, bogies, distanceSoFar);
-			}
-		}
-
-		private static double CalculateDistanceOnTrack(RailTrack track, Bogie item, bool forward)
-		{
-			if (forward)
-			{
-				return item.traveller.Span;
-			} else
-			{
-				return track.logicTrack.length - item.traveller.Span;
-			}
-		}
-
 		private void SetPendingSwtich(Junction pointed, Trainset trainset)
 		{
-			this.pendingSwitch = pointed;
-			if (pointed != null)
+			if (pointed != null && !monitoredJunctions.ContainsKey(pointed))
 			{
-				this.trainset = trainset;
-				CoroutineManager.Instance.StartCoroutine(SwitchMonitor());
-			} else
+				var coroutine = CoroutineManager.Instance.StartCoroutine(SwitchMonitor(pointed, trainset));
+				monitoredJunctions[pointed] = coroutine;
+			} else if (pointed != null)
 			{
-				this.trainset= null;
+				CoroutineManager.Instance.StopCoroutine(monitoredJunctions[pointed]);
+				monitoredJunctions.Remove(pointed);
 			}
 
 		}
 
-		private IEnumerator SwitchMonitor()
+		private IEnumerator SwitchMonitor(Junction pointed, Trainset trainset)
 		{
 			bool switched = false;
 			GameObject notification = null;
 			while (!switched)
 			{
 				bool in_loaded, out_loaded;
-				var distance = CheckJunkctionStraddled(pendingSwitch, trainset, out in_loaded, out out_loaded);
+				var distance = CheckJunkctionStraddled(pointed, trainset, out in_loaded, out out_loaded);
 				if (in_loaded &&  out_loaded)
 				{
 					string message = "";
 					if (distance > 2)
 					{
-						message = Math.Floor(Math.Round(distance, 0)).ToString("F0") + " cars to go.";
+						message = Math.Floor(distance).ToString("F0") + " cars to go.";
 					} else if (distance < 1)
 					{
 						message = "Almost there.";
@@ -349,8 +333,9 @@ namespace BrakemanRadio
 				} else
 				{
 					switched = true;
-					pendingSwitch.Switch(Junction.SwitchMode.REGULAR);
-					SetPendingSwtich(null, null);
+					pointed.Switch(Junction.SwitchMode.REGULAR);
+					ClearReverseSwitchesBeyond(pointed);
+					this.monitoredJunctions.Remove(pointed);
 				}
 			}
 			if (notification != null)
@@ -378,8 +363,7 @@ namespace BrakemanRadio
 		private CommsRadioDisplay display;
 		private CommsJunctionSwitcher switcher;
 		private static Color laserColor = new Color(1.0f, 0f, 0f);
-		private Junction pendingSwitch;
-		private Trainset trainset;
 		private GeneralLicenseType_v2 license;
+		private Dictionary<Junction, Coroutine> monitoredJunctions = new Dictionary<Junction, Coroutine>();
 	}
 }
