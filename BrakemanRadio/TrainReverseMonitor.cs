@@ -48,28 +48,21 @@ namespace BrakemanRadio
 
 		private void Cleanup()
 		{
-			StopCoroutine(this.coroutine);
-			WorldStreamingInit.LoadingFinished += Start;
 			UnloadWatcher.UnloadRequested -= Cleanup;
+			Destroy(this);
 		}
 
 		public IEnumerator MonitorCar()
 		{
+			BrakemanRadioControl.Debug("Starting reverse monitor");
 			while (true)
 			{
 				if (IsReversing())
 				{
 					//BrakemanRadioControl.Debug("Reversing");
-					var car = RearCar;
-					var ranges = new List<RangeToObstacle>();
-					foreach (var bogie in car.Bogies)
-					{
-						ranges.Add(CalculateRangeToObstacle(bogie));
-					}
-					var range = (from r in ranges
-								 where r is not null
-								 orderby r.range ascending
-								 select r).FirstOrDefault();
+					var bogie = GetLeadingBogie();
+					var car = bogie.Car;
+					var range = CalculateRangeToObstacle(bogie);
 					if (range != null)
 					{
 						bool collided = false;
@@ -106,6 +99,40 @@ namespace BrakemanRadio
 				{
 					yield return new WaitForSeconds(1f);
 				}
+			}
+		}
+
+		private Bogie GetLeadingBogie()
+		{
+			if (this.car == null)
+			{
+				return null;
+			}
+			var relevantCar = this.car.trainset.firstCar;
+			if (relevantCar.GetForwardSpeed() > 0 && relevantCar.frontCoupler.IsCoupled())
+			{
+				relevantCar = this.car.trainset.lastCar;
+			} else if (relevantCar.GetForwardSpeed() < 0 && relevantCar.rearCoupler.IsCoupled())
+			{
+				relevantCar = this.car.trainset.lastCar;
+			}
+			if (relevantCar != null)
+			{
+				return GetLeadingBogie(relevantCar);
+			}
+			return null;
+		}
+
+		private Bogie GetLeadingBogie(TrainCar car)
+		{
+			var bogies = car.Bogies.OrderBy(b => b.transform.localPosition.z);
+			if (car.GetForwardSpeed() > 0)
+			{
+				// Moving forward, so grab the highest z index bogie
+				return bogies.Last();
+			} else
+			{
+				return bogies.First();
 			}
 		}
 
@@ -254,17 +281,12 @@ namespace BrakemanRadio
 
 		private bool IsReversing()
 		{
-			var car = RearCar;
 			if (car == null)
 			{
 				return false;
 			}
-			var velocity = car.GetForwardSpeed();
-			if (car.rearCoupler.IsCoupled())
-			{
-				velocity = -1 * velocity;
-			}
-			return velocity <= -0.1f;
+			var velocity = car.GetAbsSpeed();
+			return velocity >= 0.1f;
 		}
 
 		private TrainCar RearCar
