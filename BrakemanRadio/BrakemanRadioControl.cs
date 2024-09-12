@@ -26,7 +26,11 @@ public static class BrakemanRadioControl
 		{
 			harmony = new Harmony(modEntry.Info.Id);
 			harmony.PatchAll(Assembly.GetExecutingAssembly());
-			PlayerManager.CarChanged += PlayerManager_CarChanged;
+			WorldStreamingInit.LoadingFinished += Start;
+			if (WorldStreamingInit.IsLoaded)
+			{
+				Start();
+			}
 			// Other plugin startup logic
 		}
 		catch (Exception ex)
@@ -37,6 +41,11 @@ public static class BrakemanRadioControl
 		}
 
 		return true;
+	}
+
+	private static void Start()
+	{
+		PlayerManager.CarChanged += PlayerManager_CarChanged;
 	}
 
 	private static void OnSaveGui(UnityModManager.ModEntry entry)
