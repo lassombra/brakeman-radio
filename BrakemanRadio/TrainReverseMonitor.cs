@@ -193,9 +193,9 @@ namespace BrakemanRadio
 			var distanceSoFar = 0.0;
 			foreach (var track in enumerator)  {
 				BrakemanRadioControl.Debug("Checking Tracks for end " + track.Key.logicTrack.ID.FullID + "\t" + track.Value + "\t" + distanceSoFar);
-				if ((from b in track.Key.onTrackBogies
-					where b.Car.trainset != bogie.Car.trainset
-					select b).Count() > 0)
+				var directionSign = track.Value;
+				var collidingBogies = GetCollidingBogies(track, bogie);
+				if (collidingBogies.Count() > 0)
 				{
 					return CalcDistanceToBogies(track, distanceSoFar, bogie);
 				} else if (AllowedTypes.Contains(track.Key.logicTrack.ID.trackType))
@@ -227,6 +227,23 @@ namespace BrakemanRadio
 			return range;
 		}
 
+		private IEnumerable<Bogie> GetCollidingBogies(KeyValuePair<RailTrack, float> track, Bogie bogie)
+		{
+			if (bogie.track == track.Key)
+			{
+				var directionSign = bogie.TrackDirectionSign * bogie.Car.GetForwardSpeed() > 0 ? 1 : -1;
+				return from b in track.Key.onTrackBogies
+					   where b.Car.trainset != bogie.Car.trainset
+					   where b.traveller.Span * directionSign > bogie.traveller.Span * directionSign
+					   select b;
+			} else
+			{
+				return from b in track.Key.onTrackBogies
+					   where b.Car.trainset != bogie.Car.trainset
+					   select b;
+			}
+		}
+
 		private RangeToObstacle CalcDistanceToEndOfTrack(KeyValuePair<RailTrack, float> track, double distanceSoFar, Bogie bogie)
 		{
 			var range = new RangeToObstacle();
@@ -255,25 +272,38 @@ namespace BrakemanRadio
 			var range = new RangeToObstacle();
 			if (track.Key == bogie.track)
 			{
-				var directionSign = track.Value;
+				var directionSign = bogie.TrackDirectionSign * bogie.Car.GetForwardSpeed() > 0 ? 1 : -1;
 				var collidingBogie = (from b in track.Key.onTrackBogies
 				 where b.Car.trainset != bogie.Car.trainset
 				 where b.traveller.Span * directionSign > bogie.traveller.Span * directionSign
 				 orderby b.traveller.Span * directionSign ascending
-				 select b).First();
-				range.range = Math.Abs(collidingBogie.traveller.Span - bogie.traveller.Span);
+				 select b).FirstOrDefault();
+				if (collidingBogie != null)
+				{
+					range.range = Math.Abs(collidingBogie.traveller.Span - bogie.traveller.Span);
+				} else
+				{
+					BrakemanRadioControl.logger.Error("colliding bogie not found, but should have been");
+					BrakemanRadioControl.logger.Error(track.Key.logicTrack.ID.FullID + " - " + track.Value);
+				}
 			} else if (track.Value > 0) 
 			{
 				var collidingBogie = (from b in track.Key.onTrackBogies
 									  orderby b.traveller.Span ascending
-									  select b).First();
-				range.range = distanceSoFar += collidingBogie.traveller.Span;
+									  select b).FirstOrDefault();
+				if (collidingBogie != null)
+				{
+					range.range = distanceSoFar += collidingBogie.traveller.Span;
+				}
 			} else
 			{
 				var collidingBogie = (from b in track.Key.onTrackBogies
 									  orderby b.traveller.Span descending
-									  select b).First();
-				range.range = distanceSoFar += track.Key.logicTrack.length - collidingBogie.traveller.Span;
+									  select b).FirstOrDefault();
+				if (collidingBogie != null)
+				{
+					range.range = distanceSoFar += track.Key.logicTrack.length - collidingBogie.traveller.Span;
+				}
 			}
 			range.type = ObstacleType.Car;
 			return range;
