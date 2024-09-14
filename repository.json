@@ -14,6 +14,11 @@
 			"Id": "BrakemanRadio",
 			"Version": "0.2.1",
 			"DownloadUrl": "https://github.com/lassombra/brakeman-radio/releases/download/0.2.1/BrakemanRadio.zip"
+		},
+		{
+			"Id": "BrakemanRadio",
+			"Version": "0.2.2",
+			"DownloadUrl": "https://github.com/lassombra/brakeman-radio/releases/download/0.2.2/BrakemanRadio.zip"
 		}
 	]
 }
